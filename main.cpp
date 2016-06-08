@@ -15,6 +15,7 @@ int main(int argc, char* argv[]){
 	mydb.setTempFileDir("temp");
 
 	//Import data
+	clock_t tImport = clock();
 	mydb.import("data");
 
 	//Create index on one or two columns.
@@ -26,14 +27,17 @@ int main(int argc, char* argv[]){
 	//We will do different queries in the contest.
 	//Start timing
 	clock_t tQuery = clock();
-	double result1 = mydb.query("IAH", "JFK");
-	double result2 = mydb.query("IAH", "LAX");
-	double result3 = mydb.query("JFK", "LAX");
-	double result4 = mydb.query("JFK", "IAH");
-	double result5 = mydb.query("LAX", "IAH");
+//	double result1 = mydb.query("IAH", "JFK", 0);
+//	double result2 = mydb.query("IAH", "LAX", 0);
+//	double result3 = mydb.query("JFK", "LAX", 0);
+//	double result4 = mydb.query("JFK", "IAH", 0);
+//	double result5 = mydb.query("LAX", "IAH", 0);
+//
+//    cout << result1 << ", " << result2 << ", " <<result3 << ", " <<result4 << ", " <<result5 << endl;
 
-	//End timing
+    //End timing
 	clock_t tEnd = clock();
+	printf("Time taken for import file: %.2fs\n", (double)(tIndex - tImport) / CLOCKS_PER_SEC);
 	printf("Time taken for creating index: %.2fs\n", (double)(tEnd - tIndex) / CLOCKS_PER_SEC);
 	printf("Time taken for making queries: %.2fs\n", (double)(tEnd - tQuery) / CLOCKS_PER_SEC);
 
