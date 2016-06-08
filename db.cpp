@@ -1,17 +1,23 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/file.h>
+#include <fcntl.h>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+#include <algorithm>
+#include <stdio.h>
 #include "db.h"
 
 using namespace std;
 #define CSV_READ_SIZE 500
 string DB_FILE = "temp/raw";
-struct raw {
-    char origin[6];
-    char dest[6];
-    char arrdelay[10];
-};
-
+string INDEX_FILE = "temp/index";
+unordered_map<int,vector<int>> mapping_origin;
+unordered_map<int,vector<int>> mapping_dest;
 void db::init(){
 	//Do your db initialization.
 
@@ -19,75 +25,69 @@ void db::init(){
 
 void db::setTempFileDir(string dir){
 	//All the files that created by your program should be located under this directory.
-    fstream fout;
-    fout.open(DB_FILE, ios::out|ios::trunc);
-    fout.close();
+    FILE *wd = fopen ((DB_FILE).c_str(), "w");
+    fclose(wd);
 }
 
 void db::import_csv(string csvDir, string csvName){
     char buf[CSV_READ_SIZE];
     FILE *rd = fopen ((csvDir+"/"+csvName).c_str(), "r");
-    FILE *wd = fopen ((DB_FILE).c_str(), "w");
-    int stop=0;
+    FILE *wd = fopen ((DB_FILE).c_str(), "ab+");
     fgets(buf, sizeof buf, rd);
-    raw r;
+    int char_cnt;
+    int comma_cnt;
+    char now_char;
+    char small_buf[10];
+    int small_buf_cnt;
+    int write_data[3];
     while (fgets(buf, sizeof buf, rd) != NULL)
     {
-        const char *const delim = ",";
-        char *const dupstr = strdup(buf);
-        char *sepstr = dupstr;
-        char *substr = NULL;
-        int count = 0;
-        substr = strsep(&sepstr, delim);
-        do {
-            if(count==14) {
-                strcpy(r.arrdelay, substr);
-                cout << r.arrdelay << endl;
+        char_cnt = 0;
+        comma_cnt = 0;
+        now_char = buf[char_cnt];
+        small_buf_cnt = 0;
+        while(now_char!='\n'){
+            if(now_char==','){
+                comma_cnt++;
+                if(comma_cnt==15){
+                    if(small_buf[0]=='N'){
+                        break;
+                    }
+                    small_buf[small_buf_cnt+1] = '\0';
+                    write_data[0] = atoi(small_buf);
+                }
+                else if(comma_cnt==17){
+                    write_data[1] = small_buf[2]*10000 + small_buf[1]*100 + small_buf[0];
+                }
+                else if(comma_cnt==18){
+                    write_data[2] = small_buf[2]*10000 + small_buf[1]*100 + small_buf[0];
+                    fwrite(write_data, 1, sizeof(write_data), wd);
+                    break;
+                }
+                small_buf_cnt = 0;
             }
-            else if(count==16){
-                strcpy(r.origin, substr);
+            else{
+                if(comma_cnt==14){
+                    small_buf[small_buf_cnt++] = now_char;
+                }
+                else if(comma_cnt==16){
+                    small_buf[small_buf_cnt++] = now_char;
+                }
+                else if(comma_cnt==17){
+                    small_buf[small_buf_cnt++] = now_char;
+                }
             }
-            else if(count==17){
-                strcpy(r.dest, substr);
-            }
-            char write[50];
-
-//            r.arrdelay + "," + r.origin + "," + r.dest + "\n";
-//            fwrite(&write, 50, 1, wd);
-            count++;
-            substr = strsep(&sepstr, delim);
-        } while (substr);
-        free(dupstr);
-        stop++;
+            char_cnt++;
+            now_char = buf[char_cnt];
+        }
     }
     fclose(rd);
     fclose(wd);
-    cout << "stop:" << stop << endl;
-//    fin.open(csvDir+"/"+csvName, ios::in);
-//    fout.open(DB_FILE, ios::out);
-//    fin.getline(buf, sizeof(buf));
-//    int cnt;
-//    while(fin.getline(buf, sizeof(buf))){
-//        char *p;
-//        p = strtok(buf, ",");
-//        raw tmp_raw;
-//        for (int i = 0; i < 14; ++i) {
-//            p = strtok(NULL, ",");
-//        }
-//        tmp_raw.arrdelay = atoi(p);
-//        p = strtok(NULL, ",");
-//        p = strtok(NULL, ",");
-//        strcpy(tmp_raw.origin, p);
-//        p = strtok(NULL, ",");
-//        strcpy(tmp_raw.dest, p);
-//        fout << tmp_raw.arrdelay << "," << tmp_raw.origin << "," << tmp_raw.dest << "\n";
-//    }
-//    fin.close();
-//    fout.close();
 }
 
 void db::import(string csvDir){
-	//Import csv files under this directory.
+//    import_csv(csvDir, "test.csv");
+//    cout << "test.csv imported" << endl;
     import_csv(csvDir, "2006.csv");
     cout << "2006.csv imported" << endl;
     import_csv(csvDir, "2007.csv");
@@ -98,39 +98,96 @@ void db::import(string csvDir){
 
 void db::createIndex(){
 	//Create index.
-
+    FILE *wd = fopen ((DB_FILE).c_str(), "r");
+    int fd = open((DB_FILE).c_str(), O_RDWR);
+    long sz = lseek(fd, 0, SEEK_END); // every line's size = 12, (delay, origin, dest)=(4, 4, 4)
+    int r_origin, r_dest, pos;
+    for (pos = 0; pos < sz; pos+=12) {
+        lseek(fd, pos + 4, SEEK_SET);
+        read(fd, &r_origin, 4);
+        lseek(fd, pos + 8, SEEK_SET);
+        read(fd, &r_dest, 4);
+        if (mapping_origin.find(r_origin) == mapping_origin.end()) {
+            vector<int> s;
+            mapping_origin[r_origin] = s;
+        }
+        if (mapping_dest.find(r_dest) == mapping_dest.end()) {
+            vector<int> s;
+            mapping_dest[r_dest] = s;
+        }
+        mapping_origin[r_origin].push_back(pos);
+        mapping_dest[r_dest].push_back(pos);
+    }
+    fclose(wd);
 }
 
 double db::query(string origin, string dest, int index){
 	//Do the query and return the average ArrDelay of flights from origin to dest.
 	//This method will be called multiple times.
-//    fstream fin;
-//    char buf[CSV_READ_SIZE];
-//    char origin_char[4];
-//    char dest_char[4];
-//    strcpy(origin_char, origin.c_str());
-//    strcpy(dest_char, dest.c_str());
-//    double ans = 0;
-//    fin.open(DB_FILE, ios::in);
-//    fin.getline(buf, sizeof(buf));
-//    long long total, cnt;
-//    cnt = 1;
-//    total = 0;
-//
-//    while(fin.getline(buf, sizeof(buf))) {
-//        char* p = strtok(buf, ",");
-//        raw tmp_raw;
-//        tmp_raw.arrdelay = atoi(p);
-//        p = strtok(NULL, ",");
-//        strcpy(tmp_raw.origin, p);
-//        p = strtok(NULL, ",");
-//        strcpy(tmp_raw.dest, p);
-//        if(strcmp(tmp_raw.origin, origin_char)==0 && strcmp(tmp_raw.dest, dest_char)==0){
-//            total += tmp_raw.arrdelay;
-//            cnt += 1;
+    int origin_hash = origin[2]*10000 + origin[1]*100 + origin[0];
+    int dest_hash = dest[2]*10000 + dest[1]*100 + dest[0];
+    int fd = open((DB_FILE).c_str(), O_RDWR);
+    long sz = lseek(fd, 0, SEEK_END); // every line's size = 12, (delay, origin, dest)=(4, 4, 4)
+    int r_dly, r_origin, r_dest;
+    long long total = 0;
+    long long sum = 0;
+    int cnt = 0;
+    if(index==0) {
+        for (int pos = 0; pos < sz; pos += 12) {
+            total++;
+            lseek(fd, pos + 4, SEEK_SET);
+            read(fd, &r_origin, 4);
+            if (r_origin != origin_hash) {
+                continue;
+            }
+            lseek(fd, pos + 8, SEEK_SET);
+            read(fd, &r_dest, 4);
+            if (r_dest != dest_hash) {
+                continue;
+            }
+            lseek(fd, pos, SEEK_SET);
+            read(fd, &r_dly, 4);
+            sum += r_dly;
+            cnt++;
+        }
+    }
+    else{
+//        vector<int>::iterator it1, it2;
+//        for(it1 = mapping_origin[origin_hash].begin(); it1 != mapping_origin[origin_hash].end(); ++it1) {
+//            lower_bound(mapping_dest.begin(), mapping_dest.end(), *it1);
 //        }
-//    }
-//    ans = 1.0*total/cnt;
+        cout << "origin_cnt:" <<  mapping_origin[origin_hash].size() << endl;
+//        cout << "origin_cnt:" <<  mapping_dest[dest_hash].size() << endl;
+        sort(mapping_origin[origin_hash].begin(), mapping_origin[origin_hash].end());
+        sort(mapping_dest[dest_hash].begin(), mapping_dest[dest_hash].end());
+        unsigned long p_a = 0, p_b = 0;
+        int v_a, v_b;
+//        for (int i = 0; i < mapping_origin.size(); ++i) {
+//            cout << mapping_origin[origin_hash]
+//        }
+        while(p_a<mapping_origin[origin_hash].size() && p_b<mapping_dest[dest_hash].size()){
+            v_a = mapping_origin[origin_hash].at(p_a);
+            v_b = mapping_dest[dest_hash].at(p_b);
+//            cout << p_a << endl;
+            if(v_a>v_b){
+                p_b++;
+            }
+            else if(v_a<v_b){
+                p_a++;
+            }
+            else{
+                lseek(fd, v_a, SEEK_SET);
+                read(fd, &r_dly, 4);
+                sum += r_dly;
+                cnt++;
+                p_a++;
+                p_b++;
+            }
+        }
+    }
+    cout << "sum" << sum << endl;
+    cout << "cnt" << cnt << endl;
+    cout << 1.0*sum/cnt << endl;
 	return 0;
 }
 
