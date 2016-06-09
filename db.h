@@ -1,18 +1,32 @@
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
-class db{
-	public:
-		void init();                                     //Do your db initialization.
+class db {
+public:
+    void init();                                     //Do your db initialization.
 
-		void setTempFileDir(std::string);                //All the files that created by your program should be located under this directory.
+    void setTempFileDir(
+            std::string);                //All the files that created by your program should be located under this directory.
 
-		void import_csv(std::string, std::string);
+    void import(std::string);                        //Inport a csv file to your database.
 
-		void import(std::string);                        //Inport csv files under this directory.
+    void createIndex();                              //Create index on one or two columns.
 
-		void createIndex();                              //Create index on one or two columns.
+    double query(std::string,
+                 std::string);          //Do the query and return the average ArrDelay of flights from origin to dest.
 
-		double query(std::string, std::string, int);          //Do the query and return the average ArrDelay of flights from origin to dest.
+    void cleanup();                                  //Release memory, close files and anything you should do to clean up your db class.
 
-		void cleanup();                                  //Release memory, close files and anything you should do to clean up your db class.
+    int index_created;
+
+    std::string temp_path;
+
+    std::string raw_fn;
+
+    std::unordered_map<int,std::vector<int>> mapping_origin;
+
+    std::unordered_map<int,std::vector<int>> mapping_dest;
+
 };

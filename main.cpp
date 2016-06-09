@@ -4,43 +4,51 @@
 
 using namespace std;
 
-int main(int argc, char* argv[]){
-	//declear db object
-	db mydb;
+int main(int argc, char *argv[]) {
+    db mydb;
 
-	//init db
-	mydb.init();
+    //init db
+    mydb.init();
 
-	//set temp directory
-	mydb.setTempFileDir("temp");
+    //set temp directory
+    mydb.setTempFileDir("temp");
 
-	//Import data
-	clock_t tImport = clock();
-	mydb.import("data");
+    //Import data
+    clock_t tImport = clock();
+//    mydb.import("data/test.csv");
+//    cout << "data/test.csv imported" << endl;
+    mydb.import("data/2006.csv");
+	cout << "data/2006.csv imported" << endl;
+    mydb.import("data/2007.csv");
+    cout << "data/2007.csv imported" << endl;
+    mydb.import("data/2008.csv");
+    cout << "data/2008.csv imported" << endl;
+    double import_time = (double) (clock() - tImport) / CLOCKS_PER_SEC;
 
-	//Create index on one or two columns.
-	clock_t tIndex = clock();
-	mydb.createIndex();
-	cout << "index created" << endl;
-	//Do queries
-	//These queries are required in your report.
-	//We will do different queries in the contest.
-	//Start timing
-	clock_t tQuery = clock();
-	double result1 = mydb.query("IAH", "JFK", 1);
-	double result2 = mydb.query("IAH", "LAX", 1);
-	double result3 = mydb.query("JFK", "LAX", 1);
-	double result4 = mydb.query("JFK", "IAH", 1);
-	double result5 = mydb.query("LAX", "IAH", 1);
-//
-//    cout << result1 << ", " << result2 << ", " <<result3 << ", " <<result4 << ", " <<result5 << endl;
+    //Create index on one or two columns.
+    clock_t tIndex = clock();
+    mydb.createIndex();
+    cout << "index created" << endl;
+    double index_time = (double) (clock() - tIndex) / CLOCKS_PER_SEC;
+
+    //Do queries
+    //These queries are required in your report.
+    //We will do different queries in the contest.
+    //Start timing
+    clock_t tQuery = clock();
+    double result1 = mydb.query("IAH", "JFK");
+    double result2 = mydb.query("IAH", "LAX");
+    double result3 = mydb.query("JFK", "LAX");
+    double result4 = mydb.query("JFK", "IAH");
+    double result5 = mydb.query("LAX", "IAH");
 
     //End timing
-	clock_t tEnd = clock();
-	printf("Time taken for import file: %.2fs\n", (double)(tIndex - tImport) / CLOCKS_PER_SEC);
-	printf("Time taken for creating index: %.2fs\n", (double)(tEnd - tIndex) / CLOCKS_PER_SEC);
-	printf("Time taken for making queries: %.2fs\n", (double)(tEnd - tQuery) / CLOCKS_PER_SEC);
+    double query_time = (double) (clock() - tQuery) / CLOCKS_PER_SEC;
 
-	//Cleanup db object
-	mydb.cleanup();
+    printf("Time taken for import: %.2fs\n", import_time);
+    printf("Time taken for creating index: %.2fs\n", index_time);
+    printf("Time taken for making queries: %.2fs\n", query_time);
+
+    //Cleanup db object
+    mydb.cleanup();
 }
