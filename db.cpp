@@ -80,7 +80,7 @@ void db::createIndex(){
     int pos;
     for (pos = 0; pos < sz; pos += BUF_SIZE*4) {
         lseek(fd, pos, SEEK_SET);
-        int r = read(fd, &buf, sizeof(buf));
+        ssize_t r = read(fd, &buf, sizeof(buf));
         for (int i = 0; i < BUF_SIZE; i+=3) {
             long long p = (long long)buf[i+1] * 1000000 + buf[i+2];
             if (mapping.find(p) == mapping.end()){
@@ -90,9 +90,9 @@ void db::createIndex(){
             mapping[p].push_back(pos+(4*i));
         }
     }
-    for(std::unordered_map<long long, std::vector<int> >::iterator it = mapping.begin(); it != mapping.end(); ++it) {
-        cout << it->first/1000000 << " "<< it->first%1000000 << " " << it->second.size() << endl;
-    }
+//    for(std::unordered_map<long long, std::vector<int> >::iterator it = mapping.begin(); it != mapping.end(); ++it) {
+//        cout << it->first/1000000 << " "<< it->first%1000000 << " " << it->second.size() << endl;
+//    }
     close(fd);
     index_created = 1;
 }
@@ -112,7 +112,7 @@ double db::query(string origin, string dest){
         int pos;
         for (pos = 0; pos < sz; pos += BUF_SIZE*4) {
             lseek(fd, pos, SEEK_SET);
-            int r = read(fd, &buf, sizeof(buf));
+            ssize_t r = read(fd, &buf, sizeof(buf));
             for (int i = 0; i < BUF_SIZE; i+=3) {
                 if(origin_hash == buf[i+1] && dest_hash == buf[i+2]){
                     sum += buf[i];
