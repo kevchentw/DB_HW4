@@ -1,14 +1,9 @@
 #include <string>
 #include <iostream>
-#include <fstream>
 #include <unistd.h>
-#include <sys/stat.h>
 #include <sys/file.h>
-#include <fcntl.h>
 #include <unordered_map>
 #include <vector>
-#include <algorithm>
-#include <stdio.h>
 #include "db.h"
 
 using namespace std;
@@ -18,14 +13,11 @@ void db::init(){
     index_created = 0;
     temp_path = "";
     raw_fn = "raw";
-    mapping_origin.clear();
-    mapping_dest.clear();
 }
 
 void db::setTempFileDir(string dir){
-	//All the files that created by your program should be located under this directory.
     temp_path = dir;
-    FILE *wd = fopen ((temp_path+raw_fn).c_str(), "w");
+    FILE *wd = fopen ((temp_path+"/"+raw_fn).c_str(), "w");
     fclose(wd);
 }
 
@@ -33,7 +25,7 @@ void db::setTempFileDir(string dir){
 void db::import(string csvFileName){
     char buf[CSV_READ_SIZE];
     FILE *rd = fopen ((csvFileName).c_str(), "r");
-    FILE *wd = fopen ((temp_path+raw_fn).c_str(), "ab+");
+    FILE *wd = fopen ((temp_path+"/"+raw_fn).c_str(), "ab+");
     fgets(buf, sizeof buf, rd); // ignore first line
     int char_cnt;
     int comma_cnt;
@@ -68,13 +60,7 @@ void db::import(string csvFileName){
                 small_buf_cnt = 0;
             }
             else{
-                if(comma_cnt==14){
-                    small_buf[small_buf_cnt++] = now_char;
-                }
-                else if(comma_cnt==16){
-                    small_buf[small_buf_cnt++] = now_char;
-                }
-                else if(comma_cnt==17){
+                if(comma_cnt==14 || comma_cnt==16 || comma_cnt==17){
                     small_buf[small_buf_cnt++] = now_char;
                 }
             }
@@ -87,28 +73,25 @@ void db::import(string csvFileName){
 }
 
 void db::createIndex(){
-    int fd = open((temp_path+raw_fn).c_str(), O_RDWR);
+    int fd = open((temp_path+"/"+raw_fn).c_str(), O_RDWR);
     long sz = lseek(fd, 0, SEEK_END);
-    int BUF_SIZE = 3*4096;
+    int BUF_SIZE = 3*1;
     int buf[BUF_SIZE];
-    int r_origin, r_dest, pos;
+    int pos;
     for (pos = 0; pos < sz; pos += BUF_SIZE*4) {
         lseek(fd, pos, SEEK_SET);
-        read(fd, &buf, sizeof(buf));
+        int r = read(fd, &buf, sizeof(buf));
         for (int i = 0; i < BUF_SIZE; i+=3) {
-            r_origin = buf[i+1];
-            r_dest = buf[i+2];
-            if (mapping_origin.find(r_origin) == mapping_origin.end()) {
+            long long p = (long long)buf[i+1] * 1000000 + buf[i+2];
+            if (mapping.find(p) == mapping.end()){
                 vector<int> s;
-                mapping_origin[r_origin] = s;
+                mapping[p] = s;
             }
-            if (mapping_dest.find(r_dest) == mapping_dest.end()) {
-                vector<int> s;
-                mapping_dest[r_dest] = s;
-            }
-            mapping_origin[r_origin].push_back(pos+(4*i));
-            mapping_dest[r_dest].push_back(pos+(4*i));
+            mapping[p].push_back(pos+(4*i));
         }
+    }
+    for(std::unordered_map<long long, std::vector<int> >::iterator it = mapping.begin(); it != mapping.end(); ++it) {
+        cout << it->first/1000000 << " "<< it->first%1000000 << " " << it->second.size() << endl;
     }
     close(fd);
     index_created = 1;
@@ -117,59 +100,41 @@ void db::createIndex(){
 double db::query(string origin, string dest){
     int origin_hash = origin[2]*10000 + origin[1]*100 + origin[0];
     int dest_hash = dest[2]*10000 + dest[1]*100 + dest[0];
-    int fd = open((temp_path+raw_fn).c_str(), O_RDWR);
+    int fd = open((temp_path+"/"+raw_fn).c_str(), O_RDWR);
     long sz = lseek(fd, 0, SEEK_END);
-    int r_dly, r_origin, r_dest;
-    long long total = 0;
+    int r_dly;
     long long sum = 0;
     int cnt = 0;
+    double ans;
     if(index_created==0) {
-        for (int pos = 0; pos < sz; pos += 12) {
-            total++;
-            lseek(fd, pos + 4, SEEK_SET);
-            read(fd, &r_origin, 4);
-            if (r_origin != origin_hash) {
-                continue;
-            }
-            lseek(fd, pos + 8, SEEK_SET);
-            read(fd, &r_dest, 4);
-            if (r_dest != dest_hash) {
-                continue;
-            }
+        int BUF_SIZE = 3*1;
+        int buf[BUF_SIZE];
+        int pos;
+        for (pos = 0; pos < sz; pos += BUF_SIZE*4) {
             lseek(fd, pos, SEEK_SET);
+            int r = read(fd, &buf, sizeof(buf));
+            for (int i = 0; i < BUF_SIZE; i+=3) {
+                if(origin_hash == buf[i+1] && dest_hash == buf[i+2]){
+                    sum += buf[i];
+                    cnt++;
+                }
+            }
+        }
+    }
+    else{
+        long long p = (long long)origin_hash * 1000000 + dest_hash;
+        for(std::vector<int>::iterator it = mapping[p].begin(); it != mapping[p].end(); ++it) {
+            lseek(fd, *it, SEEK_SET);
             read(fd, &r_dly, 4);
             sum += r_dly;
             cnt++;
         }
     }
-    else{
-        sort(mapping_origin[origin_hash].begin(), mapping_origin[origin_hash].end());
-        sort(mapping_dest[dest_hash].begin(), mapping_dest[dest_hash].end());
-        unsigned long p_a = 0, p_b = 0;
-        int v_a, v_b;
-        while(p_a<mapping_origin[origin_hash].size() && p_b<mapping_dest[dest_hash].size()){
-            v_a = mapping_origin[origin_hash].at(p_a);
-            v_b = mapping_dest[dest_hash].at(p_b);
-            if(v_a>v_b){
-                p_b++;
-            }
-            else if(v_a<v_b){
-                p_a++;
-            }
-            else{
-                lseek(fd, v_a, SEEK_SET);
-                read(fd, &r_dly, 4);
-                sum += r_dly;
-                cnt++;
-                p_a++;
-                p_b++;
-            }
-        }
-    }
-    cout << "sum: " << sum << endl;
-    cout << "cnt: " << cnt << endl;
-    cout << "ans: " << 1.0*sum/cnt << endl;
-	return 1.0*sum/cnt;
+    ans = 1.0*sum/cnt;
+//    cout << "sum: " << sum << endl;
+//    cout << "cnt: " << cnt << endl;
+//    cout << "ans: " << ans << endl;
+    return ans;
 }
 
 void db::cleanup(){

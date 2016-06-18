@@ -1,7 +1,7 @@
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
+
 
 class db {
 public:
@@ -25,8 +25,6 @@ public:
 
     std::string raw_fn;
 
-    std::unordered_map<int,std::vector<int>> mapping_origin;
-
-    std::unordered_map<int,std::vector<int>> mapping_dest;
+    std::unordered_map<long long, std::vector<int>> mapping;
 
 };
